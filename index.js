@@ -54,7 +54,7 @@ KevMongo.prototype.put = function put(key, value, done) {
 
   this.storage.then(function(collection) {
     collection.findAndModifyAsync(query, [], update, { upsert: true }).then(function(result) {
-      if (done) done(null, result[1].value ? result[1].value[DATA_FIELD_KEY] : null)
+      if (done) done(null, result.value ? result.value[DATA_FIELD_KEY] : null)
     })
   })
 }
@@ -75,7 +75,7 @@ KevMongo.prototype.del = function del(key, done) {
   query[ID_KEY] = key
   this.storage.then(function(collection) {
     collection.findAndModifyAsync(query, [], {}, { remove: true }).then(function(result) {
-      var value = result[1].value ? result[1].value[DATA_FIELD_KEY] : null
+      var value = result.value ? result.value[DATA_FIELD_KEY] : null
       if (done) done(null, value)
     })
   })
