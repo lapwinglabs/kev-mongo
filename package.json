@@ -1,0 +1,26 @@
+{
+  "name": "kev-mongo",
+  "version": "0.0.1",
+  "description": "mongodb adapter for kev",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lapwinglabs/kev-mongo"
+  },
+  "keywords": [
+    "key",
+    "value",
+    "mongodb",
+    "store",
+    "db"
+  ],
+  "author": "Lapwing Labs",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/lapwinglabs/kev-mongo/issues"
+  },
+  "homepage": "https://github.com/lapwinglabs/kev-mongo"
+}
