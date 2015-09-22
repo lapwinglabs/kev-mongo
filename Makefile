@@ -6,9 +6,8 @@ test: $(DBPATH) install-mongo
 		--procfile test/Procfile.test \
 		--root .
 
-node_modules_test: package.json
-	@npm install --dev
-	@touch node_modules
+install:
+	@npm install
 
 $(DBPATH):
 	@mkdir -p $@
