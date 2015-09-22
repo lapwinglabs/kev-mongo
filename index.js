@@ -1,5 +1,6 @@
 var Promise = require('bluebird')
 var mongodb = require('mongodb')
+var each = require('mongo-each')
 var MongoClient = mongodb.MongoClient;
 var Db = mongodb.Db;
 var Collection = mongodb.Collection;
@@ -60,13 +61,26 @@ KevMongo.prototype.put = function put(key, value, done) {
 }
 
 KevMongo.prototype.get = function get(key, done) {
-  var query = {}
-  query[ID_KEY] = key
-
   this.storage.then(function(collection) {
-    collection.findOneAsync(query).then(function(doc) {
-      done(null, doc ? doc[DATA_FIELD_KEY] : null)
-    })
+    if (Array.isArray(key)) {
+      var query = {}
+      query[ID_KEY] = { $in: key }
+      collection.findAsync(query).then(function (cursor) {
+        var out = {}
+        var values = cursor.toArray(function (err, values) {
+          values.forEach(function (v) {
+            out[v[ID_KEY]] = v[DATA_FIELD_KEY]
+          })
+          done(null, out)
+        })
+      })
+    } else {
+      var query = {}
+      query[ID_KEY] = key
+      collection.findOneAsync(query).then(function(doc) {
+        done(null, doc ? doc[DATA_FIELD_KEY] : null)
+      })
+    }
   })
 }
 

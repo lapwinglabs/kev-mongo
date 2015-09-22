@@ -24,12 +24,13 @@
   },
   "homepage": "https://github.com/lapwinglabs/kev-mongo",
   "dependencies": {
-    "bluebird": "^2.9.33",
-    "mongodb": "^2.0.36"
+    "bluebird": "2.10.1",
+    "mongo-each": "1.0.0",
+    "mongodb": "2.0.43"
   },
   "devDependencies": {
-    "kev": "^0.1.0",
-    "prok": "0.0.4",
+    "kev": "0.1.0",
+    "prok": "0.0.6",
     "prok-wait": "0.0.3"
   }
 }

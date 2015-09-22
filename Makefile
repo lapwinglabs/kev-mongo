@@ -1,6 +1,6 @@
 DBPATH := test/db/mongo
 
-test: node_modules_test $(DBPATH) install-mongo
+test: $(DBPATH) install-mongo
 		@LOG=test* ./node_modules/.bin/prok \
 		--env test/env.test \
 		--procfile test/Procfile.test \
