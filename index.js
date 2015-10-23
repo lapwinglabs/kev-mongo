@@ -1,6 +1,5 @@
 var Promise = require('bluebird')
 var mongodb = require('mongodb')
-var each = require('mongo-each')
 var MongoClient = mongodb.MongoClient;
 var Db = mongodb.Db;
 var Collection = mongodb.Collection;
@@ -19,30 +18,48 @@ var connections = {}
 
 var KevMongo = module.exports = function KevMongo(options) {
   if (!(this instanceof KevMongo)) return new KevMongo(options)
-
   options = options || {}
-  var url = options.url || DEFAULT_MONGO_URL
-  var collection = options.collection || DEFAULT_COLLECTION
 
-  if (!connections[url]) {
-    connections[url] = { db: MongoClient.connectAsync(url, {}), collections: {}, clients: [] }
-  }
-
-  if (!(connections[url].collections[collection])) {
-    connections[url].collections[collection] =
-      connections[url].db.then(function(db) {
+  if (options.db) {
+    var db = options.db
+    var collection = options.collection || DEFAULT_COLLECTION
+    this.storage = Promise.resolve().then(function () { return db })
+      .then(function (db) {
+        if (!db.createCollectionAsync) return Promise.promisifyAll(db)
+        else return db
+      })
+      .then(function (db) {
         return db.createCollectionAsync(collection)
-      }).then(function(col) {
+      })
+      .then(function (col) {
         var index = {}
         index[ID_KEY] = 1
+        if (!col.ensureIndexAsync) col = Promise.promisifyAll(col)
         return col.ensureIndexAsync(index).then(function() { return col })
       })
-  }
+  } else if (options.url) {
+    var url = options.url || DEFAULT_MONGO_URL
+    var collection = options.collection || DEFAULT_COLLECTION
 
-  this.storage = connections[url].collections[collection]
-  this.url = url
-  this.collection = collection
-  connections[url].clients.push(this)
+    if (!connections[url]) {
+      connections[url] = { db: MongoClient.connectAsync(url, {}), collections: {}, clients: [] }
+    }
+
+    if (!(connections[url].collections[collection])) {
+      connections[url].collections[collection] =
+        connections[url].db.then(function(db) {
+          return db.createCollectionAsync(collection)
+        }).then(function(col) {
+          var index = {}
+          index[ID_KEY] = 1
+          return col.ensureIndexAsync(index).then(function() { return col })
+        })
+    }
+    this.storage = connections[url].collections[collection]
+    this.url = url
+    this.collection = collection
+    connections[url].clients.push(this)
+  }
 }
 
 KevMongo.prototype.put = function put(key, value, done) {
@@ -96,6 +113,8 @@ KevMongo.prototype.del = function del(key, done) {
 }
 
 KevMongo.prototype.close = function(done) {
+  if (!this.url) return
+
   var index = connections[this.url].clients.indexOf(this)
   connections[this.url].clients.splice(index, 1)
 

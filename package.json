@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "kev": "0.2.1",
+    "mongoose": "^4.2.2",
     "prok": "0.0.6",
     "prok-wait": "0.0.3"
   }
