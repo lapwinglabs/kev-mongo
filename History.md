@@ -1,4 +1,9 @@
 
+0.2.2 / 2015-10-22
+==================
+
+  * enable passing in external mongo connection
+
 0.2.1 / 2015-09-21
 ==================
 
