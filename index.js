@@ -35,7 +35,7 @@ var KevMongo = module.exports = function KevMongo(options) {
         var index = {}
         index[ID_KEY] = 1
         if (!col.createIndexAsync) col = Promise.promisifyAll(col)
-        return col.createIndexAsync(index, { background: true }).then(function() { return col })
+        return col.createIndexAsync(index, { background: true }).then(function () { return col })
       })
   } else if (options.url) {
     var url = options.url || DEFAULT_MONGO_URL
@@ -47,12 +47,12 @@ var KevMongo = module.exports = function KevMongo(options) {
 
     if (!(connections[url].collections[collection])) {
       connections[url].collections[collection] =
-        connections[url].db.then(function(db) {
+        connections[url].db.then(function (db) {
           return db.createCollectionAsync(collection)
-        }).then(function(col) {
+        }).then(function (col) {
           var index = {}
           index[ID_KEY] = 1
-          return col.createIndexAsync(index, { background: true }).then(function() { return col })
+          return col.createIndexAsync(index, { background: true }).then(function () { return col })
         })
     }
     this.storage = connections[url].collections[collection]
@@ -62,7 +62,7 @@ var KevMongo = module.exports = function KevMongo(options) {
   }
 }
 
-KevMongo.prototype.put = function put(key, value, done) {
+KevMongo.prototype.put = function put (key, value, done) {
   var query = {}
   query[ID_KEY] = key
 
@@ -70,7 +70,7 @@ KevMongo.prototype.put = function put(key, value, done) {
   update[ID_KEY] = key
   update[DATA_FIELD_KEY] = value
 
-  this.storage.then(function(collection) {
+  this.storage.then(function (collection) {
     return collection.findAndModifyAsync(query, [], update, { upsert: true })
   }).then(function(result) {
     if (done) done(null, result.value ? result.value[DATA_FIELD_KEY] : null)
@@ -79,8 +79,8 @@ KevMongo.prototype.put = function put(key, value, done) {
   })
 }
 
-KevMongo.prototype.get = function get(key, done) {
-  this.storage.then(function(collection) {
+KevMongo.prototype.get = function get (key, done) {
+  this.storage.then(function (collection) {
     if (Array.isArray(key)) {
       var query = {}
       query[ID_KEY] = { $in: key }
@@ -105,25 +105,25 @@ KevMongo.prototype.get = function get(key, done) {
   })
 }
 
-KevMongo.prototype.del = function del(key, done) {
+KevMongo.prototype.del = function del (key, done) {
   var query = {}
   query[ID_KEY] = key
-  this.storage.then(function(collection) {
-    return collection.findAndModifyAsync(query, [], {}, { remove: true }).then(function(result) {
+  this.storage.then(function (collection) {
+    return collection.findAndModifyAsync(query, [], {}, { remove: true }).then(function (result) {
       var value = result.value ? result.value[DATA_FIELD_KEY] : null
       if (done) done(null, value)
     }).catch(function (err) { done && done(err) })
   })
 }
 
-KevMongo.prototype.close = function(done) {
+KevMongo.prototype.close = function (done) {
   if (!this.url) return
 
   var index = connections[this.url].clients.indexOf(this)
   connections[this.url].clients.splice(index, 1)
 
   if (connections[this.url].clients.length == 0) {
-    connections[this.url].db.then(function(db) { db.close() })
+    connections[this.url].db.then(function (db) { db.close() })
     delete connections[this.url]
   }
 
