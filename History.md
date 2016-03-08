@@ -1,4 +1,9 @@
 
+0.3.2 / 2016-03-08
+==================
+
+  * allow passing arbitrary options to mongo client
+
 0.3.1 / 2016-03-07
 ==================
 
