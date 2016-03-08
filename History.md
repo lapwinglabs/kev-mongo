@@ -1,4 +1,9 @@
 
+0.3.0 / 2016-03-07
+==================
+
+  * pass promise errors through callbacks and clean up promise chains. upgrade dependencies
+
 0.2.2 / 2015-10-22
 ==================
 
