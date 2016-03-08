@@ -34,8 +34,8 @@ var KevMongo = module.exports = function KevMongo(options) {
       .then(function (col) {
         var index = {}
         index[ID_KEY] = 1
-        if (!col.ensureIndexAsync) col = Promise.promisifyAll(col)
-        return col.ensureIndexAsync(index).then(function() { return col })
+        if (!col.createIndexAsync) col = Promise.promisifyAll(col)
+        return col.createIndexAsync(index, { background: true }).then(function() { return col })
       })
   } else if (options.url) {
     var url = options.url || DEFAULT_MONGO_URL
@@ -52,7 +52,7 @@ var KevMongo = module.exports = function KevMongo(options) {
         }).then(function(col) {
           var index = {}
           index[ID_KEY] = 1
-          return col.ensureIndexAsync(index).then(function() { return col })
+          return col.createIndexAsync(index, { background: true }).then(function() { return col })
         })
     }
     this.storage = connections[url].collections[collection]
