@@ -71,9 +71,11 @@ KevMongo.prototype.put = function put(key, value, done) {
   update[DATA_FIELD_KEY] = value
 
   this.storage.then(function(collection) {
-    collection.findAndModifyAsync(query, [], update, { upsert: true }).then(function(result) {
-      if (done) done(null, result.value ? result.value[DATA_FIELD_KEY] : null)
-    })
+    return collection.findAndModifyAsync(query, [], update, { upsert: true })
+  }).then(function(result) {
+    if (done) done(null, result.value ? result.value[DATA_FIELD_KEY] : null)
+  }).catch(function (err) {
+    if (done) done(err)
   })
 }
 
@@ -82,21 +84,23 @@ KevMongo.prototype.get = function get(key, done) {
     if (Array.isArray(key)) {
       var query = {}
       query[ID_KEY] = { $in: key }
-      collection.findAsync(query).then(function (cursor) {
+      return collection.findAsync(query).then(function (cursor) {
         var out = {}
         var values = cursor.toArray(function (err, values) {
+          if (err && done) return done(err)
+          if (err) throw err
           values.forEach(function (v) {
             out[v[ID_KEY]] = v[DATA_FIELD_KEY]
           })
           done(null, out)
         })
-      })
+      }).catch(function (err) { done && done(err) })
     } else {
       var query = {}
       query[ID_KEY] = key
-      collection.findOneAsync(query).then(function(doc) {
-        done(null, doc ? doc[DATA_FIELD_KEY] : null)
-      })
+      return collection.findOneAsync(query).then(function(doc) {
+        done && done(null, doc ? doc[DATA_FIELD_KEY] : null)
+      }).catch(function (err) { done && done(err) })
     }
   })
 }
@@ -105,10 +109,10 @@ KevMongo.prototype.del = function del(key, done) {
   var query = {}
   query[ID_KEY] = key
   this.storage.then(function(collection) {
-    collection.findAndModifyAsync(query, [], {}, { remove: true }).then(function(result) {
+    return collection.findAndModifyAsync(query, [], {}, { remove: true }).then(function(result) {
       var value = result.value ? result.value[DATA_FIELD_KEY] : null
       if (done) done(null, value)
-    })
+    }).catch(function (err) { done && done(err) })
   })
 }
 

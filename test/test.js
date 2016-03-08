@@ -2,9 +2,9 @@ var Promise = require('bluebird')
 var Kev = require('kev')
 var KevMongo = require('../index.js')
 var assert = require('assert')
-var mongoose = Promise.promisifyAll(require('mongoose'))
+var mongoose = require('mongoose')
 
-var kev = Promise.promisifyAll(Kev({ store: KevMongo( { url: process.env.MONGO_URL } ) }))
+var kev = Promise.promisifyAll(Kev({ store: KevMongo( { url: process.env.MONGO_URL + '/kev-test' } ) }))
 
 function run_test(kev) {
   return kev.putAsync('key1', 'value1').then(function() {
@@ -46,7 +46,7 @@ function run_test(kev) {
 
 var MongoClient = Promise.promisifyAll(require('mongodb').MongoClient)
 MongoClient
-  .connectAsync('mongodb://127.0.0.1:27017/kev-test2')
+  .connectAsync(process.env.MONGO_URL + '/kev-test2')
   .then(function (db) {
     return Promise.promisifyAll(Kev({ store: KevMongo({ db: db }) }))
   })
@@ -54,7 +54,7 @@ MongoClient
     return run_test(kev)
   })
   .then(function () {
-    return Promise.promisifyAll(Kev({ store: KevMongo({ db: mongoose.connectAsync(process.env.MONGO_URL).then(function () { return mongoose.connection.db }) }) }))
+    return Promise.promisifyAll(Kev({ store: KevMongo({ db: mongoose.connect(process.env.MONGO_URL).then(function () { return mongoose.connection.db }) }) }))
   })
   .then(function (kev) {
     return run_test(kev)
