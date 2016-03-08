@@ -42,7 +42,7 @@ var KevMongo = module.exports = function KevMongo(options) {
     var collection = options.collection || DEFAULT_COLLECTION
 
     if (!connections[url]) {
-      connections[url] = { db: MongoClient.connectAsync(url, {}), collections: {}, clients: [] }
+      connections[url] = { db: MongoClient.connectAsync(url, options.options || {}), collections: {}, clients: [] }
     }
 
     if (!(connections[url].collections[collection])) {
