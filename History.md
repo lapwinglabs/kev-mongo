@@ -1,4 +1,10 @@
 
+0.3.1 / 2016-03-07
+==================
+
+  * formatting
+  * switch from deprecated ensureIndex, build index in background
+
 0.3.0 / 2016-03-07
 ==================
 
