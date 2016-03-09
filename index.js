@@ -1,5 +1,6 @@
 var Promise = require('bluebird')
 var mongodb = require('mongodb')
+var seconds = require('juration').parse
 var MongoClient = mongodb.MongoClient;
 var Db = mongodb.Db;
 var Collection = mongodb.Collection;
@@ -15,54 +16,55 @@ var ID_KEY = "key"
 var DATA_FIELD_KEY = "value"
 
 var connections = {}
+var dbs = []
+var clients = []
 
 var KevMongo = module.exports = function KevMongo(options) {
   if (!(this instanceof KevMongo)) return new KevMongo(options)
   options = options || {}
-
+  var collection = this.collection = options.collection || DEFAULT_COLLECTION
   if (options.db) {
     var db = options.db
-    var collection = options.collection || DEFAULT_COLLECTION
-    this.storage = Promise.resolve().then(function () { return db })
+    this.db = Promise.resolve()
+      .then(function () { return db })
       .then(function (db) {
         if (!db.createCollectionAsync) return Promise.promisifyAll(db)
         else return db
       })
-      .then(function (db) {
-        return db.createCollectionAsync(collection).catch(function (err) {
-          if (~err.message.indexOf('collection already exists')) return
-          else throw err
-        })
-      })
-      .then(function (col) {
-        var index = {}
-        index[ID_KEY] = 1
-        if (!col.createIndexAsync) col = Promise.promisifyAll(col)
-        return col.createIndexAsync(index, { background: true }).then(function () { return col })
-      })
-  } else if (options.url) {
+  } else {
     var url = options.url || DEFAULT_MONGO_URL
     var collection = options.collection || DEFAULT_COLLECTION
 
     if (!connections[url]) {
-      connections[url] = { db: MongoClient.connectAsync(url, options.options || {}), collections: {}, clients: [] }
+      connections[url] = MongoClient.connectAsync(url, options.options || {})
     }
 
-    if (!(connections[url].collections[collection])) {
-      connections[url].collections[collection] =
-        connections[url].db.then(function (db) {
-          return db.createCollectionAsync(collection)
-        }).then(function (col) {
-          var index = {}
-          index[ID_KEY] = 1
-          return col.createIndexAsync(index, { background: true }).then(function () { return col })
-        })
-    }
-    this.storage = connections[url].collections[collection]
+    this.db = connections[url]
     this.url = url
-    this.collection = collection
-    connections[url].clients.push(this)
   }
+  var self = this
+  this.storage = this.db.then(function (db) {
+    self.db = db
+    return db.createCollectionAsync(collection).catch(function (err) {
+      if (~err.message.indexOf('collection already exists')) return
+      else throw err
+    }).then(function (collection) {
+      if (!~dbs.indexOf(db)) {
+        clients[dbs.length] = []
+        dbs.push(db)
+      }
+      clients[dbs.indexOf(db)].push(collection)
+      return collection
+    })
+  }).then(function (collection) {
+    var index = {}
+    index[ID_KEY] = 1
+    if (!collection.createIndexAsync) collection = Promise.promisifyAll(collection)
+    collection.createIndex(index, { background: true })
+    collection.createIndex({ expiresAt: 1 }, { background: true, expireAfterSeconds: 0 })
+    return collection
+  })
+  if (options.ttl) this.ttl = seconds(String(options.ttl))
 }
 
 KevMongo.prototype.put = function put (key, value, done) {
@@ -72,6 +74,9 @@ KevMongo.prototype.put = function put (key, value, done) {
   var update = {}
   update[ID_KEY] = key
   update[DATA_FIELD_KEY] = value
+  if (this.ttl !== undefined) {
+    update.expiresAt = new Date(Date.now() + this.ttl * 1000)
+  }
 
   this.storage.then(function (collection) {
     return collection.findAndModifyAsync(query, [], update, { upsert: true })
@@ -83,6 +88,7 @@ KevMongo.prototype.put = function put (key, value, done) {
 }
 
 KevMongo.prototype.get = function get (key, done) {
+  var ttl = this.ttl
   this.storage.then(function (collection) {
     if (Array.isArray(key)) {
       var query = {}
@@ -93,16 +99,19 @@ KevMongo.prototype.get = function get (key, done) {
           if (err && done) return done(err)
           if (err) throw err
           values.forEach(function (v) {
+            if (v.expiresAt && v.expiresAt < new Date(Date.now())) return
             out[v[ID_KEY]] = v[DATA_FIELD_KEY]
           })
-          done(null, out)
+          done && done(null, out)
         })
       }).catch(function (err) { done && done(err) })
     } else {
       var query = {}
       query[ID_KEY] = key
       return collection.findOneAsync(query).then(function(doc) {
-        done && done(null, doc ? doc[DATA_FIELD_KEY] : null)
+        done && !doc && done()
+        done && doc.expiresAt && doc.expiresAt < new Date(Date.now()) && done()
+        done && done(null, doc[DATA_FIELD_KEY])
       }).catch(function (err) { done && done(err) })
     }
   })
@@ -120,15 +129,19 @@ KevMongo.prototype.del = function del (key, done) {
 }
 
 KevMongo.prototype.close = function (done) {
-  if (!this.url) return
-
-  var index = connections[this.url].clients.indexOf(this)
-  connections[this.url].clients.splice(index, 1)
-
-  if (connections[this.url].clients.length == 0) {
-    connections[this.url].db.then(function (db) { db.close() })
-    delete connections[this.url]
-  }
-
-  if (done) done()
+  var self = this
+  this.storage.then(function (collection) {
+    var db = self.db
+    var db_clients = clients[dbs.indexOf(db)]
+    db_clients.splice(db_clients.indexOf(collection), 1)
+    if (db_clients.length === 0) {
+      var index = dbs.indexOf(db)
+      dbs.splice(index, 1)
+      clients.splice(index, 1)
+      self.url && delete connections[self.url]
+      db.close(done)
+    } else {
+      done && done()
+    }
+  })
 }

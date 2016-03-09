@@ -25,6 +25,7 @@
   "homepage": "https://github.com/lapwinglabs/kev-mongo",
   "dependencies": {
     "bluebird": "3.3.4",
+    "juration": "0.0.1",
     "mongo-each": "1.0.1",
     "mongodb": "2.1.7"
   },
