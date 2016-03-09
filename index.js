@@ -29,7 +29,10 @@ var KevMongo = module.exports = function KevMongo(options) {
         else return db
       })
       .then(function (db) {
-        return db.createCollectionAsync(collection)
+        return db.createCollectionAsync(collection).catch(function (err) {
+          if (~err.message.indexOf('collection already exists')) return
+          else throw err
+        })
       })
       .then(function (col) {
         var index = {}
