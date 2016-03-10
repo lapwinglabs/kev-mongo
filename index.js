@@ -74,7 +74,7 @@ KevMongo.prototype.get = function get (keys, done) {
   var query = {}
   query[ID_KEY] = { $in: keys }
   this.storage.then((db) => db.findAsync(query))
-    .then((r) => r.toArrayAsync())
+    .then((r) => Promise.fromCallback(r.toArray.bind(r)))
     .filter((r) => r && !expired(r))
     .reduce((out, v) => { out[v[ID_KEY]] = unpack(this.options.compress)(v[DATA_FIELD_KEY]); return out }, {})
     .props()
