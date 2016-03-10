@@ -1,4 +1,9 @@
 
+0.4.0 / 2016-03-10
+==================
+
+  * add compression, ttl, drop, & upgrade to kev 0.3 compatibility
+
 0.3.3 / 2016-03-09
 ==================
 
