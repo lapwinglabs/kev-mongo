@@ -1,4 +1,9 @@
 
+0.4.1 / 2016-03-10
+==================
+
+  * fix toArrayAsync for unpromisified cursors
+
 0.4.0 / 2016-03-10
 ==================
 
