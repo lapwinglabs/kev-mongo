@@ -14,6 +14,7 @@ var DEFAULT_MONGO_URL = 'mongodb://127.0.0.1:27017/kev'
 var DEFAULT_COLLECTION = 'kev'
 
 var ID_KEY = "key"
+var TAGS_KEY = "tags"
 var DATA_FIELD_KEY = "value"
 
 var connections = {}
@@ -47,23 +48,22 @@ var KevMongo = module.exports = function KevMongo (options) {
   this.storage = this.db.then((db) => {
     this.db = db
     return db.createCollectionAsync(this.collection)
-    .catch((err) => {
-      if (~err.message.indexOf('collection already exists')) return
-      else throw err
-    })
-    .then((collection) => {
-      if (!~dbs.indexOf(db)) {
-        clients[dbs.length] = []
-        dbs.push(db)
-      }
-      clients[dbs.indexOf(db)].push(collection)
-      return collection
-    })
+      .catch((err) => {
+        if (~err.message.indexOf('collection already exists')) return db.collectionAsync(this.collection)
+        else throw err
+      })
+      .then((collection) => {
+        if (!~dbs.indexOf(db)) {
+          clients[dbs.length] = []
+          dbs.push(db)
+        }
+        clients[dbs.indexOf(db)].push(collection)
+        return collection
+      })
   }).then((collection) => {
     if (!collection.createIndexAsync) collection = Promise.promisifyAll(collection)
-    var index = {}
-    index[ID_KEY] = 1
-    collection.createIndex(index, { background: true })
+    collection.createIndex({ [ID_KEY]: 1 }, { background: true })
+    collection.createIndex({ [TAGS_KEY]: 1 })
     collection.createIndex({ expiresAt: 1 }, { background: true, expireAfterSeconds: 0 })
     return collection
   })
@@ -75,16 +75,17 @@ KevMongo.prototype.get = function get (keys, done) {
   query[ID_KEY] = { $in: keys }
   this.storage.then((db) => db.findAsync(query))
     .then((r) => Promise.fromCallback(r.toArray.bind(r)))
-    .filter((r) => r && !expired(r))
+    .filter((v) => !expired(v))
     .reduce((out, v) => { out[v[ID_KEY]] = unpack(this.options.compress)(v[DATA_FIELD_KEY]); return out }, {})
     .props()
+    .tap((out) => { keys.forEach((k) => { out[k] = out[k] || null }) })
     .then((out) => done && done(null, out))
     .catch((err) => done && done(err))
 }
 
 KevMongo.prototype.put = function put (keys, options, done) {
   this.storage.then((db) => {
-    var ttl = options.ttl || this.options.ttl
+    var ttl = options.ttl ? seconds(String(options.ttl)) : this.options.ttl
     for (key in keys) {
       var query = { [ID_KEY]: key }
       var update = { [ID_KEY]: key }
@@ -124,6 +125,20 @@ KevMongo.prototype.drop = function drop (pattern, done) {
     .catch((e) => done && done(e))
 }
 
+KevMongo.prototype.tag = function tag (key, tags, done) {
+  var update = { $addToSet: { [TAGS_KEY]: { $each: tags } } }
+  this.storage.then((db) => db.findOneAndUpdateAsync({ [ID_KEY]: key }, update))
+    .then((r) => done && done())
+    .catch((e) => done && done(e))
+}
+
+KevMongo.prototype.dropTag = function dropTag (tags, done) {
+  this.storage
+    .then((db) => db.deleteManyAsync({ [TAGS_KEY]: { $elemMatch: { $in: tags } } }))
+    .then((r) => done && done(null, r.deletedCount))
+    .catch((e) => done && done(e))
+}
+
 KevMongo.prototype.close = function (done) {
   this.storage.then((collection) => {
     var db = this.db
@@ -143,7 +158,7 @@ KevMongo.prototype.close = function (done) {
 
 function pack (compress) {
   return Promise.promisify((value, done) => {
-    if (!value || !compress) return setImmediate(() => done(null, value))
+    if (!value || !compress) return setImmediate(() => done(null, value || null))
     zlib.deflate(resurrect.stringify(value), compress, (err, buf) => {
       if (err) done(err)
       else done(null, buf.toString('base64'))
@@ -153,7 +168,7 @@ function pack (compress) {
 
 function unpack (compress) {
   return Promise.promisify((value, done) => {
-    if (!value || !compress) return setImmediate(() => done(null, value))
+    if (!value || !compress) return setImmediate(() => done(null, value || null))
     zlib.inflate(new Buffer(value, 'base64'), compress, (err, val) => {
       if (err) done(err)
       else done(null, resurrect.resurrect(val.toString()))
