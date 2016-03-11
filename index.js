@@ -1,10 +1,10 @@
 var Promise = require('bluebird')
 var mongodb = require('mongodb')
 var seconds = require('juration').parse
-var resurrect = require('./resurrect')()
 var zlib = require('zlib')
 var globber = require('glob-to-regexp')
 var assign = require('deep-assign')
+var Resurrector = require('./resurrect')
 var MongoClient = mongodb.MongoClient
 Promise.promisifyAll(mongodb.Collection.prototype)
 Promise.promisifyAll(mongodb.Db.prototype)
@@ -26,6 +26,7 @@ var expired = (r) => r && r.expiresAt && r.expiresAt < new Date(Date.now())
 var KevMongo = module.exports = function KevMongo (options) {
   if (!(this instanceof KevMongo)) return new KevMongo(options)
   options = options || {}
+
   this.collection = options.collection || DEFAULT_COLLECTION
   if (options.ttl) options.ttl = seconds(String(options.ttl))
 
@@ -46,6 +47,16 @@ var KevMongo = module.exports = function KevMongo (options) {
   }
 
   this.options = options
+  var restore = options.restoreTypes || {}
+  if (restore.pack && restore.unpack) {
+    this.options.restore = restore
+  } else if (restore.resurrect) {
+    var resurrect = new Resurrector(restore.resurrect)
+    this.options.restore = { pack: resurrect.stringify.bind(resurrect), unpack: resurrect.resurrect.bind(resurrect) }
+  } else {
+    this.options.restore = { pack: (v) => v, unpack: (v) => v }
+  }
+
   this.storage = this.db.then((db) => {
     this.db = db
     return db.createCollectionAsync(this.collection)
@@ -77,7 +88,7 @@ KevMongo.prototype.get = function get (keys, options, done) {
   this.storage.then((db) => db.findAsync(query))
     .then((r) => Promise.fromCallback(r.toArray.bind(r)))
     .filter((v) => !expired(v))
-    .reduce((out, v) => { out[v[ID_KEY]] = unpack(opts.compress)(v[DATA_FIELD_KEY]); return out }, {})
+    .reduce((out, v) => { out[v[ID_KEY]] = unpack(opts.compress, opts.restore)(v[DATA_FIELD_KEY]); return out }, {})
     .props()
     .tap((out) => { keys.forEach((k) => { out[k] = out[k] || null }) })
     .then((out) => done && done(null, out))
@@ -92,11 +103,11 @@ KevMongo.prototype.put = function put (keys, options, done) {
       var query = { [ID_KEY]: key }
       var update = { [ID_KEY]: key }
       if (ttl) update.expiresAt = new Date(Date.now() + ttl * 1000)
-      keys[key] = pack(opts.compress)(keys[key])
+      keys[key] = pack(opts.compress, opts.restore)(keys[key])
         .then((v) => update[DATA_FIELD_KEY] = v)
         .then(() => db.findOneAndReplaceAsync(query, update, { upsert: true }))
         .then((r) => (r && r.value && !expired(r.value)) ? r.value[DATA_FIELD_KEY] : null)
-        .then(unpack(opts.compress))
+        .then(unpack(opts.compress, opts.restore))
     }
     return Promise.props(keys)
       .then((v) => done && done(null, v))
@@ -110,7 +121,7 @@ KevMongo.prototype.del = function del (keys, done) {
       .reduce((out, key) => {
         out[key] = db.findOneAndDeleteAsync({ [ID_KEY]: key })
           .then((r) => (r && r.value) ? r.value[DATA_FIELD_KEY] : null)
-          .then(unpack(this.options.compress))
+          .then(unpack(this.options.compress, this.options.restore))
         return out
       }, {})
       .props()
@@ -158,27 +169,32 @@ KevMongo.prototype.close = function (done) {
   })
 }
 
-function pack (compress) {
+function pack (compress, restore) {
   return Promise.promisify((value, done) => {
-    if (!value || !compress) return setImmediate(() => done(null, value || null))
+    if (!value) return setImmediate(() => done(null, null))
+
+    var data = restore.pack(value)
+    if (!compress) return setImmediate(() => done(null, data))
+
     var fn = compress.type === 'gzip' ? 'gzip' : 'deflate'
     var encoding = compress.encoding || 'base64'
-    zlib[fn](resurrect.stringify(value), compress, (err, buf) => {
+    zlib[fn](JSON.stringify(data), compress, (err, buf) => {
       if (err) done(err)
       else done(null, buf.toString(encoding))
     })
   })
 }
 
-function unpack (compress) {
+function unpack (compress, restore) {
   return Promise.promisify((value, done) => {
-    if (!value || !compress) return setImmediate(() => done(null, value || null))
+    if (!value) return setImmediate(() => done(null, null))
+    if (!compress) return setImmediate(() => done(null, restore.unpack(value)))
     if (compress.raw) return setImmediate(() => done(null, value))
     var fn = compress.type === 'gzip' ? 'gunzip' : 'inflate'
     var encoding = compress.encoding || 'base64'
     zlib[fn](new Buffer(value, encoding), compress, (err, val) => {
       if (err) done(err)
-      else done(null, resurrect.resurrect(val.toString()))
+      else done(null, restore.unpack(JSON.parse(val.toString())))
     })
   })
 }

@@ -85,3 +85,73 @@ MongoClient
       .then(() => gzip.closeAsync())
       .then(() => console.log('GZIP PASSED'))
   })
+  .then(() => {
+    // verify resurrect support with compression
+    var resurrectZip = Promise.promisifyAll(Kev({
+      store: KevMongo({
+        url: process.env.MONGO_URL + '/kev-test',
+        compress: { type: 'gzip' },
+        restoreTypes: { resurrect: true }
+      })
+    }))
+    return resurrectZip.putAsync('date', new Date(Date.now()))
+      .then(() => resurrectZip.getAsync('date'))
+      .then((value) => assert.ok(value instanceof Date))
+      .then(() => resurrectZip.putAsync('regex', /xyz/))
+      .then(() => resurrectZip.getAsync('regex'))
+      .then((value) => assert.ok(value instanceof RegExp))
+      .then(() => resurrectZip.dropAsync('*'))
+      .then(() => resurrectZip.closeAsync())
+      .then(() => console.log('COMPRESSED RESURRECT PASSED'))
+  })
+  .then(() => {
+    // verify resurrect support without compression
+    var resurrect = Promise.promisifyAll(Kev({
+      store: KevMongo({
+        url: process.env.MONGO_URL + '/kev-test',
+        restoreTypes: { resurrect: true }
+      })
+    }))
+    return resurrect.putAsync('date', new Date(Date.now()))
+      .then(() => resurrect.getAsync('date'))
+      .then((value) => assert.ok(value instanceof Date))
+      .then(() => resurrect.putAsync('regex', /xyz/))
+      .then(() => resurrect.getAsync('regex'))
+      .then((value) => assert.ok(value instanceof RegExp))
+      .then(() => resurrect.dropAsync('*'))
+      .then(() => resurrect.closeAsync())
+      .then(() => console.log('UNCOMPRESSED RESURRECT PASSED'))
+  })
+  .then(() => {
+    // verify custom packing without compress
+    var customPack = Promise.promisifyAll(Kev({
+      store: KevMongo({
+        url: process.env.MONGO_URL + '/kev-test',
+        restoreTypes: { pack: (v) => 'stored', unpack: (v) => 'retrieved' }
+      })
+    }))
+    return customPack.putAsync('data', { hi: 'there' })
+      .then(() => customPack.store.storage)
+      .then((db) => db.findOneAsync({}))
+      .then((doc) => assert.equal(doc.value, 'stored'))
+      .then(() => customPack.getAsync('data'))
+      .then((val) => assert.equal(val, 'retrieved'))
+      .then(() => customPack.dropAsync('*'))
+      .then(() => customPack.closeAsync())
+      .then(() => console.log('CUSTOM RESTORE PASSED'))
+  })
+  .then(() => {
+    // verify underlying object storage without resurrect/compress
+    var objStore = Promise.promisifyAll(Kev({
+      store: KevMongo({
+        url: process.env.MONGO_URL + '/kev-test',
+      })
+    }))
+    return objStore.putAsync('obj', { hi: 'there' })
+      .then(() => objStore.store.storage)
+      .then((db) => db.findOneAsync({}))
+      .then((doc) => assert.deepEqual(doc.value, { hi: 'there' }))
+      .then(() => objStore.dropAsync('*'))
+      .then(() => objStore.closeAsync())
+      .then(() => console.log('DOCUMENT STORAGE PASSED'))
+  })
