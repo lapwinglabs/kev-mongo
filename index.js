@@ -4,6 +4,7 @@ var seconds = require('juration').parse
 var resurrect = require('./resurrect')()
 var zlib = require('zlib')
 var globber = require('glob-to-regexp')
+var assign = require('deep-assign')
 var MongoClient = mongodb.MongoClient
 Promise.promisifyAll(mongodb.Collection.prototype)
 Promise.promisifyAll(mongodb.Db.prototype)
@@ -69,14 +70,14 @@ var KevMongo = module.exports = function KevMongo (options) {
   })
 }
 
-KevMongo.prototype.get = function get (keys, done) {
-  var ttl = this.ttl
+KevMongo.prototype.get = function get (keys, options, done) {
+  var opts = assign({}, this.options, options)
   var query = {}
   query[ID_KEY] = { $in: keys }
   this.storage.then((db) => db.findAsync(query))
     .then((r) => Promise.fromCallback(r.toArray.bind(r)))
     .filter((v) => !expired(v))
-    .reduce((out, v) => { out[v[ID_KEY]] = unpack(this.options.compress)(v[DATA_FIELD_KEY]); return out }, {})
+    .reduce((out, v) => { out[v[ID_KEY]] = unpack(opts.compress)(v[DATA_FIELD_KEY]); return out }, {})
     .props()
     .tap((out) => { keys.forEach((k) => { out[k] = out[k] || null }) })
     .then((out) => done && done(null, out))
@@ -84,17 +85,18 @@ KevMongo.prototype.get = function get (keys, done) {
 }
 
 KevMongo.prototype.put = function put (keys, options, done) {
+  var opts = assign({}, this.options, options)
   this.storage.then((db) => {
-    var ttl = options.ttl ? seconds(String(options.ttl)) : this.options.ttl
+    var ttl = opts.ttl ? seconds(String(opts.ttl)) : opts.ttl
     for (key in keys) {
       var query = { [ID_KEY]: key }
       var update = { [ID_KEY]: key }
       if (ttl) update.expiresAt = new Date(Date.now() + ttl * 1000)
-      keys[key] = pack(this.options.compress)(keys[key])
+      keys[key] = pack(opts.compress)(keys[key])
         .then((v) => update[DATA_FIELD_KEY] = v)
         .then(() => db.findOneAndReplaceAsync(query, update, { upsert: true }))
         .then((r) => (r && r.value && !expired(r.value)) ? r.value[DATA_FIELD_KEY] : null)
-        .then(unpack(this.options.compress))
+        .then(unpack(opts.compress))
     }
     return Promise.props(keys)
       .then((v) => done && done(null, v))
@@ -159,9 +161,11 @@ KevMongo.prototype.close = function (done) {
 function pack (compress) {
   return Promise.promisify((value, done) => {
     if (!value || !compress) return setImmediate(() => done(null, value || null))
-    zlib.deflate(resurrect.stringify(value), compress, (err, buf) => {
+    var fn = compress.type === 'gzip' ? 'gzip' : 'deflate'
+    var encoding = compress.encoding || 'base64'
+    zlib[fn](resurrect.stringify(value), compress, (err, buf) => {
       if (err) done(err)
-      else done(null, buf.toString('base64'))
+      else done(null, buf.toString(encoding))
     })
   })
 }
@@ -169,7 +173,10 @@ function pack (compress) {
 function unpack (compress) {
   return Promise.promisify((value, done) => {
     if (!value || !compress) return setImmediate(() => done(null, value || null))
-    zlib.inflate(new Buffer(value, 'base64'), compress, (err, val) => {
+    if (compress.raw) return setImmediate(() => done(null, value))
+    var fn = compress.type === 'gzip' ? 'gunzip' : 'inflate'
+    var encoding = compress.encoding || 'base64'
+    zlib[fn](new Buffer(value, encoding), compress, (err, val) => {
       if (err) done(err)
       else done(null, resurrect.resurrect(val.toString()))
     })

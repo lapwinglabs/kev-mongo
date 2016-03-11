@@ -51,5 +51,37 @@ MongoClient
       ttl: 5,
       compress: true
     })
-    return test_core(store)
+    return test_core(store).then(() => console.log('COMPRESSION PASSED'))
+  })
+  .then(() => {
+    // verify raw retrieval support
+    var raw = Promise.promisifyAll(Kev({ store: KevMongo({
+      url: process.env.MONGO_URL + '/kev-compressed',
+      ttl: 5,
+      compress: true
+    })}))
+    return raw.putAsync('tagged', 'hello world')
+      .then(() => raw.getAsync('tagged'))
+      .then((value) => assert.equal(value, 'hello world'))
+      .then(() => raw.getAsync('tagged', { compress: { raw: true } }))
+      .then((value) => assert.equal(value, 'eJxTykjNyclXKM8vyklRAgAgRQSh'))
+      .then(() => raw.dropAsync('*'))
+      .then(() => raw.closeAsync())
+      .then(() => console.log('RAW RETRIEVAL PASSED'))
+  })
+  .then(() => {
+    // verify gzip compression support
+    var gzip = Promise.promisifyAll(Kev({ store: KevMongo({
+      url: process.env.MONGO_URL + '/kev-compressed',
+      ttl: 5,
+      compress: { type: 'gzip' }
+    })}))
+    return gzip.putAsync('tagged', 'hello world')
+      .then(() => gzip.getAsync('tagged'))
+      .then((value) => assert.equal(value, 'hello world'))
+      .then(() => gzip.getAsync('tagged', { compress: { raw: true } }))
+      .then((value) => assert.equal(value, 'H4sIAAAAAAAAA1PKSM3JyVcozy/KSVECAITtPj0NAAAA'))
+      .then(() => gzip.dropAsync('*'))
+      .then(() => gzip.closeAsync())
+      .then(() => console.log('GZIP PASSED'))
   })
