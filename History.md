@@ -1,4 +1,9 @@
 
+0.5.1 / 2016-03-11
+==================
+
+  * custom packing/unpacking, better control over resurrect
+
 0.5.0 / 2016-03-11
 ==================
 
